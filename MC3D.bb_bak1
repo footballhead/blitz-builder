@@ -1,0 +1,424 @@
+; Minecraft Rip-Off
+; Because I had nothing better to do with my Saturday
+; Michael Hitchens (FootBallHead)
+; ---------------------------------------
+
+; =>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>=>
+; TODO LIST
+;  + Cube creation check
+;  + Cube array??
+;  + Particles / creation animation
+;  + Console?
+;  + Menu!
+;  + Shaded cubes!!
+; <=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<=
+Include "RGBType.bb"
+Include "BlockType.bb"
+Include "InGameMenu.bb"
+Include "Interpolation.bb"
+
+; Collisions types
+Const TYPE_NONE = 0 , TYPE_PLAYER = 1 , TYPE_BOX = 2
+
+;Graphics + misc
+Const S_WIDTH = 854 , S_HEIGHT = 480
+Graphics3D S_WIDTH , S_HEIGHT , 0 , 2
+SetBuffer BackBuffer( )
+AmbientLight 255 , 255 , 255
+HidePointer
+
+Include "LoadResources.bb"
+
+Global tex_blank2 = CreateTexture( 16 , 16 )
+DrawBlankTexture( tex_blank2 , 2 ) ; only make a power of 2!
+
+Dim blockBank.BlockType( 5 )
+blockBank( 0 ) = BLOCK_GRASS
+blockBank( 1 ) = BLOCK_DIRT
+blockBank( 2 ) = BLOCK_STONE
+blockBank( 3 ) = BLOCK_BRICK
+blockBank( 4 ) = BLOCK_GLASS
+blockBank( 5 ) = Null
+
+Global dis# = 0.0
+Global vart = 0.0
+Global widescreen = True
+Global selectedType = 0
+Global pikky = 0
+Global jump = False
+Global noclip = False
+Global gravity# = 0.0
+Global menu = False
+;Global playFall = True
+Global playStep# = 0
+Global pitch# = 0.0 , yaw# = 0 , roll# = 0
+Global camY# = 0.0 , lCamY# = 0.0
+
+; FPS camera + variables
+Global camera = CreateCamera( )
+PositionEntity camera , 0 , 4 , 0
+CameraRange camera , 0.2 , 200
+CameraClsColor camera , 0 , 128 , 255
+CameraFogMode camera , 1
+CameraFogColor camera , 0 , 128 , 255
+CameraFogRange camera , 100 , 200
+If widescreen Then CameraZoom camera , 0.75
+camY# = EntityY#( camera )
+
+Global cameraBox = CreateCube( )
+EntityType cameraBox , TYPE_PLAYER
+PositionEntity cameraBox , 0 , camY# , 0
+ScaleEntity cameraBox , 0.25 , 1.99 , 0.25
+EntityRadius cameraBox , 0.25 , 1.99
+EntityAlpha cameraBox , 0
+
+; Setup visible world
+Global skybox = CreateSkybox( )
+GenerateWorld( )
+
+Collisions TYPE_PLAYER , TYPE_BOX , 2 , 2
+
+While Not KeyDown( 1 )
+	CalculateDeltatimeAndGametime( )
+	
+	If KeyHit( 28 ) Then
+		menu = Not menu
+		ShowCursor( menu )
+		If Not menu Then CenterMouse
+	EndIf
+	
+	;If not in the menu
+	If Not menu
+		If KeyHit( 16 ) Then
+			selectedType = selectedType + 1
+			If blockBank( selectedType ) = Null Then selectedType = 0
+		EndIf
+		
+		playStep# = playStep# + 40.0 * Delta_Time#
+		;If playStep = 100 Then playStep = 0
+	
+		pikky = LinePick( EntityX#( camera ) , camY# , EntityZ#( camera ) , 0 , -1.75 , 0 , 0.25 )
+	
+		gravity# = gravity# - 35.0 * Delta_Time#
+		If gravity < -50 Then gravity = -50
+	
+		If ( camY# = lCamY# ) And ( Not pikky = 0 )
+	;	If playFall = True And gravity# < -0.25
+	;		PlaySound( snd_fall )
+	;		playFall = False
+	;	EndIf	
+	;	If Not pikky = 0 Then jump = False
+			If jump
+				Local chanFall = PlaySound( snd_fall )
+			EndIf
+			gravity# = 0.0
+			jump = False
+		EndIf
+	
+		If KeyHit( 57 )
+			If Not jump
+				Local chan = PlaySound( snd_jump )
+				gravity# = 12
+				;playFall = True
+				jump = True
+			EndIf
+		EndIf
+	
+	;If pikky = 0 And gravity# = 0.0
+	;	gravity# = gravity# - 0.01
+	;	playFall = True
+	;EndIf
+	
+		MoveCamera
+		
+		If playStep# > 20.0 Then playStep# = 0.0
+		
+		UpdateCameraLook
+		If MouseHit( 1 ) Then Pick( 8 )
+		If MouseHit( 2 ) Then CubeRemove( 8 )
+	Else
+		
+	EndIf
+	
+	;GOOD ALGOR
+	;PositionEntity miscCube , EntityX#( camera ) + Cos#( yaw# + 90 ) , EntityY#( camera ) , EntityZ#( camera ) + Sin#( yaw# + 90)
+	;PositionEntity miscCube , EntityX#( camera ) , EntityY#( camera ) - Sin#( pitch# ) , EntityZ#( camera ) + Cos#( pitch# )
+	;PositionEntity miscCube , EntityX#( camera ) + Cos#( pitch# ) , EntityY#( camera ) - Sin#( pitch# ) , EntityZ#( camera )
+	
+	UpdateWorld
+	
+	lCamY# = camY#
+	camY# = EntityY#( cameraBox )
+	
+	PositionEntity camera , EntityX#( cameraBox ) , EntityY#( cameraBox ) + 1 , EntityZ#( cameraBox )
+	
+	RenderWorld
+		
+	If Not menu
+		DrawHUD
+	Else
+		DrawMenu
+	EndIf
+	
+	; -- Frames Per Second counter.
+	; Place into the main program loop where it will be executed each frame. The variables used here do not need to be declared globlly as this will occur automatically if the routine is placed in the main program. The value of 'milli_secs' should be set from the 'MilliSecs()' Blitz function at the start of the main program loop.
+	FPS_framecounter = FPS_framecounter + 1
+	If milli_secs >= FPS_timeout
+		FPS_timeout = milli_secs + 1000
+		FPS_framecount = FPS_framecounter
+		FPS_framecounter = 0
+	EndIf
+	Text 10, 160, "FPS"
+	Text 40, 160, FPS_framecount
+	;^^^^^^
+	
+	VWait 10 ; Make sure there is no tearing (god I hate tearing)
+	Flip False
+Wend
+
+End
+
+Function CenterMouse( )
+	MoveMouse S_WIDTH / 2 , S_HEIGHT / 2
+End Function
+
+Function ShowCursor( bool )
+	If bool = True
+		ShowPointer
+	Else
+		HidePointer
+	EndIf
+End Function
+
+Function DrawBlankTexture( tex , div )
+	Local w = TextureWidth( tex )
+	Local h = TextureHeight( tex )
+	Local check = True
+	SetBuffer TextureBuffer( tex )
+	
+	ClsColor 255 , 255 , 255 : Cls
+	Color 192 , 192 , 192
+	For y = 0 To div - 1
+		For x = 0 To div - 1
+			If check Then Rect w/div*(x) , h/div*y , w/div , h/div , True
+			check = Not check
+		Next
+		check = Not check
+	Next
+	
+	SetBuffer BackBuffer( )
+End Function	
+	
+Function CreateBrushAdv( tex=0 , red=255 , gre=255 , blu=255 )
+	Local brush = CreateBrush( red , gre , blu )
+	If (tex = 0) Then tex = tex_blank2
+	BrushTexture brush , tex
+	Return brush
+End Function
+
+Function CreateBrushBlankRGB( rgb.RGBColor )
+	Local brush = CreateBrush( RGBColorRed( rgb ) , RGBColorGreen( rgb ) , RGBColorBlue( rgb ) )
+	BrushTexture brush , tex_blank2
+	Return brush
+End Function
+
+; Rotate camera based on mouse movements (all FPS-like)
+Function UpdateCameraLook( )
+	pitch# = pitch# + MouseYSpeed( )
+	yaw# = yaw# - MouseXSpeed( )
+	
+	If pitch# > 90.0 Then pitch# = 90.0
+	If pitch# < -90.0 Then pitch# = -90.0
+	
+	RotateEntity camera , pitch# , yaw# , roll#
+	CenterMouse( )
+End Function
+
+; This doozy simply creates a cube with customizable faces
+Function CreateSixCube( xx# , yy# , zz# , up , down , side )
+	Local mesh , surf
+	Local v0 , v1 , v2 , tri
+	
+	mesh = CreateMesh( )
+	surf = CreateSurface( mesh , side ) ;front
+	v0 = AddVertex( surf , -1 ,  1 , -1 , 0 , 0 )
+	v1 = AddVertex( surf , -1 , -1 , -1 , 0 , 1 )
+	v2 = AddVertex( surf ,  1 , -1 , -1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	v0 = AddVertex( surf , -1 ,  1 , -1 , 0 , 0 )
+	v1 = AddVertex( surf ,  1 ,  1 , -1 , 1 , 0 )
+	v2 = AddVertex( surf ,  1 , -1 , -1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	
+	surf = CreateSurface( mesh , side ) ;right
+	v0 = AddVertex( surf , 1 ,  1 ,  -1 , 0 , 0 )
+	v1 = AddVertex( surf , 1 , -1 ,  -1 , 0 , 1 )
+	v2 = AddVertex( surf , 1 , -1 ,   1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	v0 = AddVertex( surf , 1 ,  1 ,  -1 , 0 , 0 )
+	v1 = AddVertex( surf , 1 ,  1 ,   1 , 1 , 0 )
+	v2 = AddVertex( surf , 1 , -1 ,   1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	
+	surf = CreateSurface( mesh , side ) ;back
+	v0 = AddVertex( surf ,  1 , -1 , 1 , 0 , 1 )
+	v1 = AddVertex( surf ,  1 ,  1 , 1 , 0 , 0 )
+	v2 = AddVertex( surf , -1 ,  1 , 1 , 1 , 0 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	v0 = AddVertex( surf ,  1 , -1 , 1 , 0 , 1 )
+	v1 = AddVertex( surf , -1 , -1 , 1 , 1 , 1 )
+	v2 = AddVertex( surf , -1 ,  1 , 1 , 1 , 0 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	
+	surf = CreateSurface( mesh , side ) ;left
+	v0 = AddVertex( surf , -1 , -1 ,  1 , 0 , 1 )
+	v1 = AddVertex( surf , -1 ,  1 ,  1 , 0 , 0 )
+	v2 = AddVertex( surf , -1 ,  1 , -1 , 1 , 0 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	v0 = AddVertex( surf , -1 , -1 ,  1 , 0 , 1 )
+	v1 = AddVertex( surf , -1 , -1 , -1 , 1 , 1 )
+	v2 = AddVertex( surf , -1 ,  1 , -1 , 1 , 0 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	
+	surf = CreateSurface( mesh , up ) ;up
+	v0 = AddVertex( surf , -1 ,  1 ,  1 , 0 , 0 )
+	v1 = AddVertex( surf , -1 ,  1 , -1 , 0 , 1 )
+	v2 = AddVertex( surf ,  1 ,  1 , -1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	v0 = AddVertex( surf , -1 ,  1 ,  1 , 0 , 0 )
+	v1 = AddVertex( surf ,  1 ,  1 ,  1 , 1 , 0 )
+	v2 = AddVertex( surf ,  1 ,  1 , -1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	
+	surf = CreateSurface( mesh , down ) ;down
+	v0 = AddVertex( surf ,  1 ,  -1 , -1 , 0 , 0 )
+	v1 = AddVertex( surf ,  1 ,  -1 ,  1 , 0 , 1 )
+	v2 = AddVertex( surf , -1 ,  -1 ,  1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v1 , v2 )
+	v0 = AddVertex( surf ,  1 ,  -1 , -1 , 0 , 0 )
+	v1 = AddVertex( surf , -1 ,  -1 , -1 , 1 , 0 )
+	v2 = AddVertex( surf , -1 ,  -1 ,  1 , 1 , 1 )
+	tri = AddTriangle( surf , v0 , v2 , v1 )
+	
+	UpdateNormals mesh
+	EntityPickMode mesh , 2
+	PositionEntity mesh , xx# , yy# , zz#
+	EntityType mesh , TYPE_BOX
+	Return mesh
+End Function
+
+; Calls CreateSixCube with brushes of colour
+Function CreateSixCubeColor( xx# , yy# , zz# , up.RGBColor , down.RGBColor , side.RGBColor )
+	Return CreateSixCube( xx# , yy# , zz# , CreateBrushBlankRGB( up ) , CreateBrushBlankRGB( down ) , CreateBrushBlankRGB( side ) )
+End Function
+
+Function CreateSixCubeType( xx# , yy# , zz# , btype.BlockType )
+	Local c = CreateSixCube( xx# , yy# , zz# , CreateBrushBlankRGB( BlockTypeTop( btype ) ) , CreateBrushBlankRGB( BlockTypeBottom( btype ) ) , CreateBrushBlankRGB( BlockTypeSide( btype ) ) )
+	EntityAlpha c , BlockTypeAlpha#( btype )
+	Return c
+	;Return CreateSixCube( xx# , yy# , zz# , CreateBrushBlankRGB( BlockTypeTop( btype ) ) , CreateBrushBlankRGB( BlockTypeBottom( btype ) ) , CreateBrushBlankRGB( BlockTypeSide( btype ) ) )
+End Function	
+	
+; Create and set properties of skybox
+Function CreateSkybox( )
+	Local tex_side = LoadTexture( "sky_l.bmp" )
+	ScaleTexture tex_side , 1 , 1.1
+	Local bru_side = CreateBrushAdv( tex_side )
+	
+	Local box = CreateSixCube( 0 , 0 , 0 , CreateBrush( 0 , 128 , 255 ) , CreateBrush( 192 , 192 , 192 ) , bru_side )
+	ScaleEntity box , 100 , 100 , 100
+	FlipMesh box
+	EntityPickMode box , 0 
+	EntityType box , TYPE_NONE
+	EntityShininess box , 0
+	Return box
+End Function
+
+; Keyboard checks related to the camera
+Function MoveCamera()
+	Local x# = EntityX#( cameraBox ) , z# = EntityZ#( cameraBox )
+	
+	If Not noclip Then RotateEntity cameraBox,0,yaw#,0
+;	If KeyDown(17) Then MoveEntity cameraBox,0,0,0.1
+;	If KeyDown(30) Then MoveEntity cameraBox,-0.1,0,0
+;	If KeyDown(31) Then MoveEntity cameraBox,0,0,-0.1
+;	If KeyDown(32) Then MoveEntity cameraBox,0.1,0,0
+	
+	If KeyDown(17) Then MoveEntity cameraBox , 0 , 0 , 4 * Delta_Time#
+	If KeyDown(30) Then MoveEntity cameraBox , -4 * Delta_Time#, 0 , 0
+	If KeyDown(31) Then MoveEntity cameraBox , 0 , 0 , -4 * Delta_Time#
+	If KeyDown(32) Then MoveEntity cameraBox , 4 * Delta_Time# , 0 , 0
+	
+	If ( Not EntityX#( cameraBox ) = x# ) Or ( Not EntityZ#( cameraBox ) = z# ) And ( playStep# > 20.0 ) And (gravity# = 0.0) Then PlaySound( snd_step )
+	
+	TranslateEntity cameraBox , 0 , gravity# * Delta_Time# , 0
+End Function
+
+; Create new cube around existing cube at crosshairs 
+Function Pick( reach )
+	Local picked = LinePick( EntityX#( camera ) , EntityY#( camera ) , EntityZ#( camera ) , Cos#( yaw# + 90 ) * Cos#( pitch# ) * reach , - Sin#( pitch# ) * reach , Sin#( yaw# + 90) * Cos#( pitch# ) * reach )
+	If (Not picked = 0) And (Not picked = pikky)
+		Local b = CreateSixCubeType( EntityX#( picked ) + PickedNX#( ) * 2 , EntityY#( picked ) + PickedNY#( ) * 2 , EntityZ#( picked ) + PickedNZ#( ) * 2 , blockBank( selectedType ) )		
+		dis# = EntityDistance#( b , cameraBox )
+		If EntityDistance#( b , cameraBox ) < 2.0;If ( (EntityY#( cameraBox ) - EntityY#( b ) < 2.5) And (Not gravity# = 0.0) ) Or (EntityDistance#( b , cameraBox ) < 2.0)
+			FreeEntity b
+		Else
+			PlaySound snd_place
+		EndIf
+	EndIf
+End Function
+
+; Check and remove selected cube within reach
+Function CubeRemove( reach )
+	Local picked = LinePick( EntityX#( camera ) , EntityY#( camera ) , EntityZ#( camera ) , Cos#( yaw# + 90 ) * Cos#( pitch# ) * reach , - Sin#( pitch# ) * reach , Sin#( yaw# + 90) * Cos#( pitch# ) * reach )
+	If (Not picked = 0)
+		PlaySound( snd_destroy )
+		FreeEntity picked
+	EndIf
+End Function
+
+; Create the default terrain
+Function GenerateWorld( )
+	For z = 0 To 20
+		For x = 0 To 20
+			For y = 0 To 0
+				CreateSixCubeType( x * 2 , -2 - 2*y , z * 2 , BLOCK_GRASS )
+			Next
+			Next
+		Next
+	;Next
+End Function
+
+; Draw the 2D elements of the HUD
+Function DrawHUD( )
+	SetFont courier10
+	Color 255 , 255 , 255
+	
+	
+	
+	Text 0 , 0 , "Gravity: "+gravity#
+	Text 0 , 20 , "Camera Y: "+camY#
+	Text 0 , 40 , "Last camera y: "+lCamY#
+	Text 0 , 60 , "Pikky: "+pikky
+	Text 0 , 80 , "Play step: "+playStep
+	Text 0 , 100 , "Selected: "+BlockTypeName$( blockBank( selectedType ) )
+	Text 0 , 120 , "Distance: "+dis#
+	Text 0 , 140 , "Jump: "+jump
+	Color 255 , 0 , 0
+	Text S_WIDTH / 2 , S_HEIGHT / 2 , "( + )" , True , True
+End Function
+
+; Well... draw the menu... duh
+Function DrawMenu( )
+	SetFont arial20b
+	Color 255 , 255 , 255
+	Text S_WIDTH / 2 , 40 , "Blitz3D Builder" , True , True
+	;Text S_WIDTH / 2 , S_HEIGHT / 2 , "Paused" , True , True
+	SetFont arial14b
+	For i = 0 To 1
+		Text S_WIDTH/2 , 80+20*i , MenuItemTitle$( items( i ) )+": < "+MenuItemMask$( items( i ) , MenuItemSelected( items( i ) ) ) + " >" , True , False
+	Next
+End Function
+;~IDEal Editor Parameters:
+;~B#43#44#46#48#96#98#152#154#155#156#157#158#15F#161
+;~C#Blitz3D
